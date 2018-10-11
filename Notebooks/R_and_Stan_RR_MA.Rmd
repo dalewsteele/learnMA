@@ -1,0 +1,50 @@
+---
+title: "Bayesian Meta-Analysis with R and Stan"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+In this notebook, I'm working through a
+[blog post](http://devinincerti.com/2015/10/31/bayesian-meta-analysis.html) by Devin Incerti.
+
+
+
+```{r}
+rct <- data.frame(study = c("New York", "Malamo I", "Kopparberg", "Ostergotland",
+              "Canada I", "Canada II", "Stockholm", "Goteborg", "UK age trial"))
+rct$year <- c(1963, 1976, 1977, 1978, 1980, 1980, 1981, 1982, 1991)
+rct$d1 <- c(218, 87, 126, 135, 105, 107, 66, 88, 105)
+rct$n1 <- c(31000, 20695, 38589, 38491, 25214, 19711, 40318, 21650, 53884)
+rct$d0 <- c(262, 108, 104, 173, 108, 105, 45, 162, 251)
+rct$n0 <- c(31000, 20783, 18582, 37403, 25216, 19694, 19943, 29961, 106956)
+```
+
+Using relative risk. The log of RR is approaximatgely normal. 
+
+```{r}
+library(metafor)
+rct$p1 <- rct$d1/rct$n1
+rct$p0 <- rct$d0/rct$n0
+rct$rr <- rct$p1/rct$p0
+rct$lrr <- log(rct$rr)
+rct$lse <- sqrt((1 - rct$p1)/(rct$p1 * rct$n1) + (1 - rct$p0)/(rct$p0 * rct$n0))
+rct$lower <- exp(rct$lrr - qnorm(.975) * rct$lse)
+rct$upper <- exp(rct$lrr + qnorm(.975) * rct$lse)
+
+p <- forest(x = rct$rr, ci.lb = rct$lower, ci.ub = rct$upper, 
+       slab = paste(rct$study, rct$year, sep = ", "), refline = 1)
+text(min(p$xlim), .88 * max(p$ylim), "Study and Year", pos = 4, font = 2)
+text(max(p$xlim), .88 * max(p$ylim), "Relative Risk [95% CI]", pos = 2, font = 2)
+```
+
+Hmmm... at the moment I'm unable to install rstan on Windows!
+
+```{r}
+library("rstan")
+set.seed(101)
+J <- nrow(rct)
+stan.dat <- list(J = J, y = rct$lrr, sigma = rct$lse)
+fit <- stan(file = "bayesian_meta_analysis.stan", data = stan.dat, iter = 2000, chains = 4)
+```
+
