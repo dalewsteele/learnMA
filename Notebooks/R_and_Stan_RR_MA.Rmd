@@ -5,8 +5,16 @@ output: html_notebook
 
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
+
 In this notebook, I'm working through a
 [blog post](http://devinincerti.com/2015/10/31/bayesian-meta-analysis.html) by Devin Incerti.
+
+** QUESTIONS **
+Understand the delta method for finding the approximate variance of the ?log risk ratio?
+How do I turn-off warnings/details when loading metafor?
+Why the occassional error
+Understand what extract() does
+Can't I create the posterior predictive distribution using stan code? (ie. part of model)
 
 
 
@@ -31,7 +39,9 @@ rct$lrr <- log(rct$rr)
 rct$lse <- sqrt((1 - rct$p1)/(rct$p1 * rct$n1) + (1 - rct$p0)/(rct$p0 * rct$n0))
 rct$lower <- exp(rct$lrr - qnorm(.975) * rct$lse)
 rct$upper <- exp(rct$lrr + qnorm(.975) * rct$lse)
+```
 
+```{r}
 p <- forest(x = rct$rr, ci.lb = rct$lower, ci.ub = rct$upper, 
        slab = paste(rct$study, rct$year, sep = ", "), refline = 1)
 text(min(p$xlim), .88 * max(p$ylim), "Study and Year", pos = 4, font = 2)
@@ -39,12 +49,45 @@ text(max(p$xlim), .88 * max(p$ylim), "Relative Risk [95% CI]", pos = 2, font = 2
 ```
 
 Hmmm... at the moment I'm unable to install rstan on Windows!
+The fix was provided by:
 
+https://support.rstudio.com/hc/en-us/articles/219949047-Installing-older-versions-of-packages
+
+devtools::install_version("StanHeaders", version = "2.17.2", repos = "http://cran.us.r-project.org")
+
+Furthermore, mu and eta are given uniform priors. Is this done implicitly by Stan?
+ 
+ 
 ```{r}
+# Remove most recent of version of StanHeaders and install older version
+# devtools::install_version("StanHeaders", version = "2.17.2", repos = "http://cran.us.r-project.org")
+
 library("rstan")
+
 set.seed(101)
 J <- nrow(rct)
 stan.dat <- list(J = J, y = rct$lrr, sigma = rct$lse)
-fit <- stan(file = "bayesian_meta_analysis.stan", data = stan.dat, iter = 2000, chains = 4)
+control = list(adapt_delta = 0.85)
+fit <- stan(file = "bayesian_meta_analysis.stan", data = stan.dat, iter = 2000, chains = 4, control = control)
+
+post <- extract(fit, permuted = TRUE)
+quantile(exp(post$mu), probs = c(0.025, 0.5, 0.975))
+quantile(post$tau, probs = c(0.025, 0.5, 0.975))
+
+names(post)
+hist(post$tau)
+summary(fit)
+```
+
+Predict a new study.  Can't I create the posterior predictive distribution using 
+
+```{r}
+n.sims <- nrow(post$mu)
+theta.new <- rep(NA, n.sims)
+for (i in 1:n.sims){ 
+  theta.new[i]  <- rnorm(1,  post$mu[i],  post$tau[i]) 
+}
+
+quantile(exp(theta.new), probs = c(0.025, 0.5, 0.975))
 ```
 
